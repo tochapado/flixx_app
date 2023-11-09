@@ -1,5 +1,14 @@
 const global = {
   currentPage: window.location.pathname,
+  search: {
+    term: '',
+    type: '',
+    page: 1,
+    totalPages: 1,
+    totalResults: 0,
+  },
+  api: {
+  },
 };
 
 async function displayPopularMovies() {
@@ -295,6 +304,125 @@ function displayBackgroundImage(type, backgroundPath) {
   }
 };
 
+// Search movies/shows
+async function search() {
+  const queryString = window.location.search;
+  const urlParams = new URLSearchParams(queryString);
+  
+  global.search.term = urlParams.get('search-term');
+  global.search.type = urlParams.get('type');
+
+  if(global.search.term !== '' && global.search.term !== null) {
+    const { results, page, total_pages, total_results } = await searchAPIData();
+
+    global.search.page = page;
+    global.search.totalPages = total_pages;
+    global.search.totalResults = total_results;
+
+    if(results.length === 0) {
+      showAlert('No results found', 'alert-error');
+      return;
+    };
+
+    displaySearchResults(results);
+    document.querySelector('#search-term').value = '';
+
+  } else {
+    showAlert('Please enter a search term!', 'alert-error');
+  };
+};
+
+function displaySearchResults(results) {
+
+  const searchResults = document.querySelector('#search-results');
+  document.querySelector('#search-results-heading').innerHTML = '';
+  document.querySelector('#pagination').innerHTML = '';
+
+  searchResults.innerHTML = '';
+
+  results.forEach(result => {
+
+    const div = document.createElement('div');
+    div.classList.add('card');
+  
+    const a = document.createElement('a');
+    a.setAttribute('href', `${global.search.type}-details.html?id=${result.id}`);
+
+    const img = document.createElement('img');
+
+    result.poster_path ?
+      img.setAttribute('src', `https://image.tmdb.org/t/p/w500${result.poster_path}`) :
+      img.setAttribute('src', 'images/no-image.jpg');
+
+    img.classList.add('card-img-top');
+    img.setAttribute('alt', global.search.type === 'movie' ? result.title : result.name);
+
+    const divBody = document.createElement('div');
+    divBody.classList.add('card-body');
+
+    const h5 = document.createElement('h5');
+    h5.classList.add('card-title');
+    h5.textContent = global.search.type === 'movie' ? result.title : result.name;
+
+    const p = document.createElement('p');
+    p.classList.add('card-text');
+
+    const small = document.createElement('small');
+    small.classList.add('text-muted');
+    small.textContent = global.search.type === 'movie' ? 'Release: ' + result.release_date : 'Aired: ' + result.first_air_date;
+
+    p.appendChild(small);
+    
+    divBody.appendChild(h5);
+    divBody.appendChild(p);
+
+    a.appendChild(img);
+
+    div.appendChild(a);
+    div.appendChild(divBody);
+
+    document.querySelector('#search-results-heading').innerHTML = `
+      <h2>${results.length} of ${global.search.totalResults} results for ${global.search.term}</h2>
+    `;
+
+    searchResults.appendChild(div);
+  });
+
+  displayPagination();
+};
+
+// Create Pagination for search
+function displayPagination() {
+  const div = document.createElement('div');
+  div.classList.add('pagination');
+
+  div.innerHTML = `
+    <button class="btn btn-primary" id="prev">Prev</button>
+    <button class="btn btn-primary" id="next">Next</button>
+    <div class="page-counter">Page ${global.search.page} of ${global.search.totalPages}</div>
+  `;
+
+  document.querySelector('#pagination').appendChild(div);
+
+  // Disable prev button on first page
+  if(global.search.page === 1) document.querySelector('#prev').disabled = true;
+  // Disable last button on last page
+  if(global.search.page === global.search.totalPages) document.querySelector('#next').disabled = true;
+
+  // Next page
+  document.querySelector('#next').addEventListener('click', async () => {
+    global.search.page++;
+    const { results } = await searchAPIData();
+    displaySearchResults(results);
+  });
+  // Previous page
+  document.querySelector('#prev').addEventListener('click', async () => {
+    global.search.page--;
+    const { results } = await searchAPIData();
+    displaySearchResults(results);
+  });
+};
+
 // Display Slider Movies
 async function displaySlider() {
   const { results } = await fetchAPIData('movie/now_playing');
@@ -355,22 +483,27 @@ function initSwiper() {
 
 // Fetch data from TMDB Api
 async function fetchAPIData(endpoint) {
-  const API_URL = 'https://api.themoviedb.org/3/';
-  const API_KEY = '0d13c1b88ff7b5734e9fcae3ecc97306';
-  const API_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIwZDEzYzFiODhmZjdiNTczNGU5ZmNhZTNlY2M5NzMwNiIsInN1YiI6IjY1MzY5NjgwOGNmY2M3MDBhYTAzOTFiOCIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.jNt7raDwXUZMf2RNDPoKeG8s81EwcXF0vVfIJsdvxAs';
-
-  // const options = {
-  //   method: 'GET',
-  //   headers: {
-  //     accept: 'application/json',
-  //     Authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIwZDEzYzFiODhmZjdiNTczNGU5ZmNhZTNlY2M5NzMwNiIsInN1YiI6IjY1MzY5NjgwOGNmY2M3MDBhYTAzOTFiOCIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.jNt7raDwXUZMf2RNDPoKeG8s81EwcXF0vVfIJsdvxAs'
-  //   }
-  // };
 
   showSpinner();
 
   const response = await fetch(
-    `${API_URL}${endpoint}?api_key=${API_KEY}&language=en-US&page=1`
+    `${global.api.URL}${endpoint}?api_key=${global.api.KEY}&language=en-US&page=1`
+  );
+
+  const data = await response.json();
+
+  hideSpinner();
+
+  return data;
+};
+
+// Search data from TMDB Api
+async function searchAPIData() {
+
+  showSpinner();
+
+  const response = await fetch(
+    `${global.api.URL}search/${global.search.type}?api_key=${global.api.KEY}&language=en-US&query=${global.search.term}&page=${global.search.page}`
   );
 
   const data = await response.json();
@@ -391,6 +524,16 @@ function hideSpinner() {
 function highlightActiveLink() {
   const links = document.querySelectorAll('.nav-link');
   links.forEach(link => link.getAttribute('href') === global.currentPage ? link.classList.add('active') : '');
+};
+
+// Show Alert
+function showAlert(message, className) {
+  const alertEl = document.createElement('div');
+  alertEl.classList.add('alert', className);
+  alertEl.appendChild(document.createTextNode(message));
+  document.querySelector('#alert').appendChild(alertEl);
+
+  setTimeout(() => alertEl.remove(), 3000);
 };
 
 function addCommasToNumber(number) {
@@ -415,7 +558,7 @@ function init() {
       displayShowDetails();
       break;
     case '/search.html':
-      console.log('search page');
+      search();
       break;
   };
 
